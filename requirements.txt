@@ -1,0 +1,9 @@
+aiogram==3.31.0
+gspread==6.2.0
+google-auth==2.39.0
+google-api-python-client==2.179.0
+python-dotenv==1.1.0
+APScheduler==3.11.0
+tzdata==2025.2
+# нужен только если используешь socks5-прокси (PROXY_URL)
+aiohttp-socks==0.10.1
