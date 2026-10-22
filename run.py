@@ -43,7 +43,7 @@ async def main():
         sheets.ensure_worksheet(stage, score_headers, cols=60)
 
     scheduler = setup_scheduler(bot)
-    log.info("Планировщик запущен (напоминания, дневной рейтинг).")
+    log.info("Планировщик запущен (напоминания, синхронизация баллов).")
 
     try:
         await bot.set_my_commands(COMMANDS)

@@ -168,7 +168,7 @@ def main():
     print("\nГотово! Демо-данные добавлены.")
     print("Проверка:")
     print(" - бот: /id, /start (зарегистрируйся как реальный) ")
-    print(" - в боте: /rating, /ratingnow, /matches")
+    print(" - в боте: /rating, /matches")
     print(" - админ: /test, /dryrun, /refresh, /export")
     print(" - лист «Матчи»: DEMO09 начнётся ~через 90 мин (сработает напоминание)")
     print("\nОчистить: python clear_demo.py")

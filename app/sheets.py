@@ -6,9 +6,20 @@ from datetime import datetime
 
 import gspread
 from gspread.exceptions import WorksheetNotFound
+from gspread.utils import rowcol_to_a1
 
 import config
 from app.utils import clean, normalize, now_local, parse_match_datetime
+
+
+def _write_cell(ws, row, col, value):
+    """Запись одной ячейки как RAW-текста.
+
+    update_cell() в gspread по умолчанию использует USER_ENTERED, из-за чего
+    значение, начинающееся с '=', '+', '-' или '@', может стать формулой
+    (formula injection). Пишем явно RAW.
+    """
+    ws.update([[value]], rowcol_to_a1(row, col), value_input_option="RAW")
 
 MATCH_HEADERS = [
     "ID",
@@ -213,7 +224,7 @@ class Sheets:
                 )
             )
         for row_idx, mid in to_fix:
-            ws.update_cell(row_idx, _ID_COL, mid)
+            _write_cell(ws, row_idx, _ID_COL, mid)
         if to_fix:
             self._invalidate(config.SHEET_MATCHES)
         return matches
@@ -226,7 +237,7 @@ class Sheets:
 
     def mark_reminded(self, match: Match, stamp: datetime):
         ws = self.ensure_worksheet(config.SHEET_MATCHES, MATCH_HEADERS)
-        ws.update_cell(match.row, _REMIND_COL, stamp.strftime("%d.%m.%Y %H:%M"))
+        _write_cell(ws, match.row, _REMIND_COL, stamp.strftime("%d.%m.%Y %H:%M"))
         self._invalidate(config.SHEET_MATCHES)
 
     def create_match(
@@ -265,7 +276,7 @@ class Sheets:
     def set_result(self, match: Match, result):
         """Записывает результат матча (имя победившей команды или A/B)."""
         ws = self.ensure_worksheet(config.SHEET_MATCHES, MATCH_HEADERS)
-        ws.update_cell(match.row, _RESULT_COL, clean(result))
+        _write_cell(ws, match.row, _RESULT_COL, clean(result))
         self._invalidate(config.SHEET_MATCHES)
 
     # ------------------------------------------------------------------ users

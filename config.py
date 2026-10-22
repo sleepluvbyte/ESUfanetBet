@@ -64,6 +64,8 @@ STAGES = [
 
 TIMEZONE = os.getenv("TIMEZONE", "Asia/Yekaterinburg")
 REMINDER_MINUTES = int(os.getenv("REMINDER_MINUTES", "120"))
-RATING_TIME = os.getenv("RATING_TIME", "21:00")  # HH:MM, локальное время
-RATING_CHAT_ID = os.getenv("RATING_CHAT_ID", "").strip()
 DRAW_THRESHOLD = float(os.getenv("DRAW_THRESHOLD", "0.7"))
+
+# Лимиты длины вводимого текста (защита от раздувания сообщений и таблицы)
+FIO_MAX = 100
+TEAM_MAX = 60

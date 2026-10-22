@@ -1,16 +1,15 @@
 import asyncio
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from aiogram import Bot
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 import config
 from app.scoring import compute_rating, schedule_scoreboard_refresh
 from app.sheets import sheets
-from app.utils import format_dt, now_local
+from app.utils import esc, format_dt, now_local
 
 
 def _reminder_text(match) -> str:
@@ -22,13 +21,13 @@ def _reminder_text(match) -> str:
         when = f"{minutes} мин."
     lines = [
         f"⏰ <b>Матч начнётся через {when}</b>\n",
-        f"<b>{match.team_a}</b> — <b>{match.team_b}</b>",
-        f"🕒 {moment}",
+        f"<b>{esc(match.team_a)}</b> — <b>{esc(match.team_b)}</b>",
+        f"🕒 {esc(moment)}",
     ]
     if match.stage:
-        lines.append(f"🏷 Этап: {match.stage}")
+        lines.append(f"🏷 Этап: {esc(match.stage)}")
     if match.region:
-        lines.append(f"📍 Регион: {match.region}")
+        lines.append(f"📍 Регион: {esc(match.region)}")
     lines.append("\nНе забудь сделать прогноз! 🔮")
     return "\n".join(lines)
 
@@ -78,49 +77,6 @@ async def sync_scores_job(bot: Bot):
     schedule_scoreboard_refresh()
 
 
-async def daily_rating_job(bot: Bot):
-    rating, _, total = compute_rating()
-    if not rating:
-        return
-
-    schedule_scoreboard_refresh()
-
-    medals = {1: "🥇", 2: "🥈", 3: "🥉"}
-    top_lines = [f"🏆 <b>Итоги дня</b> (матчей сыграно: {total})\n"]
-    for place, row in enumerate(rating[:10], start=1):
-        top_lines.append(
-            f"{medals.get(place, f'{place}.')} {row.user.fio} — {row.points} б"
-        )
-    top_text = "\n".join(top_lines)
-
-    if config.RATING_CHAT_ID:
-        try:
-            await bot.send_message(int(config.RATING_CHAT_ID), top_text)
-        except Exception:
-            pass
-        return
-
-    for place, row in enumerate(rating, start=1):
-        try:
-            await bot.send_message(
-                row.user.tg_id,
-                f"🏆 <b>Итоги дня</b>\nТвоё место: <b>{place}</b> из {len(rating)}\n"
-                f"Баллов: <b>{row.points}</b> (угадано {row.correct}/{row.total})\n\n"
-                + top_text,
-            )
-        except Exception:
-            pass
-        await asyncio.sleep(0.05)
-
-
-def _rating_time():
-    try:
-        hour, minute = config.RATING_TIME.split(":")
-        return int(hour), int(minute)
-    except Exception:
-        return 21, 0
-
-
 def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
     scheduler = AsyncIOScheduler(timezone=config.TIMEZONE)
     scheduler.add_job(
@@ -130,14 +86,6 @@ def setup_scheduler(bot: Bot) -> AsyncIOScheduler:
         id="reminders",
         max_instances=1,
         coalesce=True,
-    )
-    hour, minute = _rating_time()
-    scheduler.add_job(
-        daily_rating_job,
-        CronTrigger(hour=hour, minute=minute),
-        args=[bot],
-        id="daily_rating",
-        max_instances=1,
     )
     scheduler.add_job(
         sync_scores_job,

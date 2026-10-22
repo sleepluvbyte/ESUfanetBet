@@ -16,7 +16,7 @@ from app.scoring import (
 )
 from app.sheets import sheets
 from app.states import AdminStates
-from app.utils import DT_MAX, clean, now_local, parse_match_datetime
+from app.utils import DT_MAX, clean, esc, now_local, parse_match_datetime, sanitize
 
 router = Router()
 
@@ -45,7 +45,6 @@ ADMIN_HELP = (
     "/stats — статистика турнира\n"
     "/test — проверка настроек перед турниром\n"
     "/dryrun — превью напоминания (только тебе)\n"
-    "/ratingnow — превью дневного рейтинга\n"
     "/refresh — пересчитать баллы прогнозов\n"
     "/export — выгрузить «Итоги» и «Розыгрыш»\n"
     "/broadcast — рассылка всем участникам\n"
@@ -185,8 +184,6 @@ async def cmd_test(message: Message):
         f"Админы: <code>{admins}</code>",
         f"Филиалы: {len(config.BRANCHES)}",
         f"Напоминание за: {config.REMINDER_MINUTES} мин",
-        f"Дневной рейтинг: {config.RATING_TIME} ({config.TIMEZONE})",
-        f"Рейтинг: {config.RATING_CHAT_ID or 'в личку'}",
         f"Порог розыгрыша: {config.DRAW_THRESHOLD:.0%}\n",
         f"Участников: <b>{len(users)}</b>",
         f"Матчей: <b>{len(matches)}</b> (сыграно {len(finished)})",
@@ -197,7 +194,7 @@ async def cmd_test(message: Message):
         mins = int((match.dt - now).total_seconds() // 60)
         fire = "сработает ✅" if mins <= config.REMINDER_MINUTES else "пока не в окне"
         lines.append(
-            f"\nБлижайший матч: {match.team_a} — {match.team_b}\n"
+            f"\nБлижайший матч: {esc(match.team_a)} — {esc(match.team_b)}\n"
             f"через {mins} мин · напоминание {fire}"
         )
     else:
@@ -222,23 +219,11 @@ async def cmd_dryrun(message: Message):
         return
     match = upcoming[0]
     await message.answer(
-        f"Превью напоминания (только тебе): {match.team_a} — {match.team_b}"
+        f"Превью напоминания (только тебе): {esc(match.team_a)} — {esc(match.team_b)}"
     )
     await message.answer(
         _reminder_text(match), reply_markup=_match_button(match.mid)
     )
-
-
-@router.message(Command("ratingnow"))
-async def cmd_ratingnow(message: Message):
-    if not _is_admin(message.from_user.id):
-        await _denied(message)
-        return
-    from app.handlers.menu import _rating_text
-
-    rating, _, total = compute_rating()
-    await message.answer("Превью дневного рейтинга (только тебе):")
-    await message.answer(_rating_text(rating, total, message.from_user.id))
 
 
 # ======================================================= создание матча (FSM)
@@ -311,7 +296,7 @@ async def st_match_time(message: Message, state: FSMContext):
 
 @router.message(AdminStates.match_team_a)
 async def st_match_team_a(message: Message, state: FSMContext):
-    name = clean(message.text or "")
+    name = sanitize(message.text or "", config.TEAM_MAX)
     if not name:
         await message.answer("Пусто. Введи название команды А.")
         return
@@ -322,7 +307,7 @@ async def st_match_team_a(message: Message, state: FSMContext):
 
 @router.message(AdminStates.match_team_b)
 async def st_match_team_b(message: Message, state: FSMContext):
-    name = clean(message.text or "")
+    name = sanitize(message.text or "", config.TEAM_MAX)
     if not name:
         await message.answer("Пусто. Введи название команды Б.")
         return
@@ -337,11 +322,13 @@ async def st_match_team_b(message: Message, state: FSMContext):
 def _match_preview(data) -> str:
     return (
         "➕ <b>Проверь матч</b>\n\n"
-        f"Этап: <b>{data.get('stage', '')}</b>\n"
-        f"Дата: <b>{data.get('date', '')}</b>\n"
-        f"Время: <b>{data.get('time', '')}</b>\n"
-        f"Команда А: <b>{data.get('team_a', '')}</b> ({data.get('branch_a') or '—'})\n"
-        f"Команда Б: <b>{data.get('team_b', '')}</b> ({data.get('branch_b') or '—'})\n\n"
+        f"Этап: <b>{esc(data.get('stage', ''))}</b>\n"
+        f"Дата: <b>{esc(data.get('date', ''))}</b>\n"
+        f"Время: <b>{esc(data.get('time', ''))}</b>\n"
+        f"Команда А: <b>{esc(data.get('team_a', ''))}</b> "
+        f"({esc(data.get('branch_a') or '—')})\n"
+        f"Команда Б: <b>{esc(data.get('team_b', ''))}</b> "
+        f"({esc(data.get('branch_b') or '—')})\n\n"
         "Сохранить и разослать участникам?"
     )
 
@@ -364,7 +351,7 @@ async def cb_mbranch(call: CallbackQuery, state: FSMContext):
         await state.update_data(branch_a=branch)
         await state.set_state(AdminStates.match_branch_b)
         await call.message.edit_text(
-            f"Филиал команды А: <b>{branch or '—'}</b>\n\n"
+            f"Филиал команды А: <b>{esc(branch) or '—'}</b>\n\n"
             "Шаг 7/7. Выбери <b>филиал команды Б</b>:",
             reply_markup=kb.branch_pick_kb("B"),
         )
@@ -403,8 +390,8 @@ async def cb_msave(call: CallbackQuery, state: FSMContext):
     await state.clear()
     await call.message.edit_text(
         "✅ Матч сохранён в таблицу.\n"
-        f"<b>{data['team_a']}</b> — <b>{data['team_b']}</b> "
-        f"({data['date']} {data['time']})"
+        f"<b>{esc(data['team_a'])}</b> — <b>{esc(data['team_b'])}</b> "
+        f"({esc(data['date'])} {esc(data['time'])})"
     )
     sent = await _announce_match(mid)
     await call.message.answer(f"📨 Анонс разослан участникам: {sent}.")
@@ -468,7 +455,7 @@ async def cb_rres(call: CallbackQuery):
         return
     moment = f"{match.date} {match.time}".strip()
     await call.message.edit_text(
-        f"✅ {match.team_a} — {match.team_b}\n🕒 {moment}\n\nКто победил?",
+        f"✅ {esc(match.team_a)} — {esc(match.team_b)}\n🕒 {esc(moment)}\n\nКто победил?",
         reply_markup=kb.result_side_kb(match),
     )
     await call.answer()
@@ -490,8 +477,9 @@ async def cb_rset(call: CallbackQuery):
     sheets.write_scores(score_map)
     schedule_scoreboard_refresh()
     await call.message.edit_text(
-        f"✅ Результат записан: <b>{match.team_a}</b> — <b>{match.team_b}</b>\n"
-        f"🏆 Победитель: <b>{team}</b>\nБаллы пересчитаны."
+        f"✅ Результат записан: <b>{esc(match.team_a)}</b> — "
+        f"<b>{esc(match.team_b)}</b>\n"
+        f"🏆 Победитель: <b>{esc(team)}</b>\nБаллы пересчитаны."
     )
     await call.answer("Готово")
 

@@ -7,7 +7,7 @@ import config
 from app import keyboards as kb
 from app.sheets import sheets
 from app.states import Registration
-from app.utils import clean, normalize
+from app.utils import clean, esc, normalize, sanitize
 
 router = Router()
 
@@ -27,7 +27,7 @@ async def cmd_start(message: Message, state: FSMContext):
     user = sheets.get_user(message.from_user.id)
     if user:
         await message.answer(
-            WELCOME_BACK.format(fio=user.fio),
+            WELCOME_BACK.format(fio=esc(user.fio)),
             reply_markup=kb.main_menu_kb(),
         )
         return
@@ -37,7 +37,7 @@ async def cmd_start(message: Message, state: FSMContext):
 
 @router.message(Registration.fio)
 async def reg_fio(message: Message, state: FSMContext):
-    fio = clean(message.text or "")
+    fio = sanitize(message.text or "", config.FIO_MAX)
     if len(fio.split()) < 2 or len(fio) < 5:
         await message.answer(
             "Похоже, это не ФИО. Введи полностью: Фамилия Имя Отчество."
@@ -68,7 +68,7 @@ async def reg_region(message: Message, state: FSMContext):
     sheets.add_user(message.from_user.id, fio, branch, username)
     await state.clear()
     await message.answer(
-        f"Готово, <b>{fio}</b>! Филиал: <b>{branch}</b>.\n"
+        f"Готово, <b>{esc(fio)}</b>! Филиал: <b>{esc(branch)}</b>.\n"
         "Прогнозы и напоминания будут приходить сюда.",
         reply_markup=kb.remove_kb(),
     )

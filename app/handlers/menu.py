@@ -5,7 +5,7 @@ from aiogram.types import CallbackQuery, Message
 from app import keyboards as kb
 from app.scoring import compute_rating, schedule_scoreboard_refresh
 from app.sheets import sheets
-from app.utils import DT_MAX, format_dt, now_local
+from app.utils import DT_MAX, esc, format_dt, now_local
 
 router = Router()
 
@@ -24,22 +24,27 @@ def _upcoming(matches, now):
 
 def _match_line(match):
     moment = format_dt(match.dt) if match.dt else f"{match.date} {match.time}".strip()
-    parts = [f"🕒 {moment}"]
+    parts = [f"🕒 {esc(moment)}"]
     if match.stage:
-        parts.append(match.stage)
+        parts.append(esc(match.stage))
     if match.region:
-        parts.append(match.region)
+        parts.append(esc(match.region))
     if match.branch_a or match.branch_b:
-        parts.append(f"{match.branch_a} / {match.branch_b}")
-    return f"<b>{match.team_a}</b> — <b>{match.team_b}</b>\n" + " · ".join(parts)
+        parts.append(f"{esc(match.branch_a)} / {esc(match.branch_b)}")
+    return (
+        f"<b>{esc(match.team_a)}</b> — <b>{esc(match.team_b)}</b>\n"
+        + " · ".join(parts)
+    )
 
 
 def _match_text(match, user_pred=None):
     lines = [_match_line(match), ""]
     if match.resolved:
-        lines.append(f"🏁 Матч завершён. Победитель: <b>{match.winner_team}</b>")
+        lines.append(
+            f"🏁 Матч завершён. Победитель: <b>{esc(match.winner_team)}</b>"
+        )
     if user_pred:
-        lines.append(f"Твой прогноз: <b>{user_pred.prediction}</b>")
+        lines.append(f"Твой прогноз: <b>{esc(user_pred.prediction)}</b>")
         if match.resolved:
             status = (
                 "✅ угадал (+1 балл)"
@@ -65,7 +70,7 @@ def _rating_text(rating, total_matches, highlight_tg=None):
         medal = medals.get(place, f"{place}.")
         you = " ← ты" if highlight_tg and highlight_tg in row.tg_ids else ""
         lines.append(
-            f"{medal} {row.user.fio} — <b>{row.points}</b> б ({row.correct}/{row.total}){you}"
+            f"{medal} {esc(row.user.fio)} — <b>{row.points}</b> б ({row.correct}/{row.total}){you}"
         )
     text = header + "\n".join(lines)
     if highlight_tg:
@@ -92,7 +97,7 @@ async def cb_home(call: CallbackQuery):
     if not user:
         await call.answer(NOT_REGISTERED, show_alert=True)
         return
-    await _safe_edit(call, f"Главное меню, <b>{user.fio}</b>:", kb.main_menu_kb())
+    await _safe_edit(call, f"Главное меню, <b>{esc(user.fio)}</b>:", kb.main_menu_kb())
     await call.answer()
 
 
@@ -168,15 +173,15 @@ async def cb_my_preds(call: CallbackQuery):
         if not match:
             continue
         moment = format_dt(match.dt) if match.dt else f"{match.date} {match.time}"
-        head = f"{moment} · {match.team_a} vs {match.team_b}"
+        head = f"{esc(moment)} · {esc(match.team_a)} vs {esc(match.team_b)}"
         if match.resolved:
             if match.is_correct(pred.prediction):
                 correct += 1
-                lines.append(f"✅ {head}\n   прогноз: {pred.prediction} (+1)")
+                lines.append(f"✅ {head}\n   прогноз: {esc(pred.prediction)} (+1)")
             else:
-                lines.append(f"❌ {head}\n   прогноз: {pred.prediction}")
+                lines.append(f"❌ {head}\n   прогноз: {esc(pred.prediction)}")
         else:
-            lines.append(f"⏳ {head}\n   прогноз: {pred.prediction}")
+            lines.append(f"⏳ {head}\n   прогноз: {esc(pred.prediction)}")
     lines.append("")
     lines.append(f"Верных прогнозов: <b>{correct}</b>")
     await _safe_edit(call, "\n".join(lines), kb.back_to_menu_kb())
@@ -203,8 +208,8 @@ async def cb_profile(call: CallbackQuery):
     place = rating.index(mine) + 1 if mine else "-"
     text = (
         f"👤 <b>Профиль</b>\n\n"
-        f"ФИО: <b>{user.fio}</b>\n"
-        f"Филиал: <b>{user.region}</b>\n"
+        f"ФИО: <b>{esc(user.fio)}</b>\n"
+        f"Филиал: <b>{esc(user.region)}</b>\n"
         f"Баллы: <b>{mine.points if mine else 0}</b>\n"
         f"Угадано: {mine.correct if mine else 0} из {total}\n"
         f"Место в рейтинге: <b>{place}</b>"
@@ -240,7 +245,7 @@ async def cmd_me(message: Message):
     mine = next((r for r in rating if user.tg_id in r.tg_ids), None)
     place = rating.index(mine) + 1 if mine else "-"
     await message.answer(
-        f"👤 <b>{user.fio}</b> ({user.region})\n"
+        f"👤 <b>{esc(user.fio)}</b> ({esc(user.region)})\n"
         f"Баллы: <b>{mine.points if mine else 0}</b>\n"
         f"Угадано: {mine.correct if mine else 0} из {total}\n"
         f"Место: <b>{place}</b>"
